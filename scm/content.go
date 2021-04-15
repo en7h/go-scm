@@ -9,8 +9,10 @@ import "context"
 type (
 	// Content stores the contents of a repository file.
 	Content struct {
-		Path string
-		Data []byte
+		Path   string
+		Data   []byte
+		Sha    string
+		BlobID string
 	}
 
 	// ContentParams provide parameters for creating and
@@ -21,13 +23,16 @@ type (
 		Message   string
 		Data      []byte
 		Sha       string
+		BlobID    string
 		Signature Signature
 	}
 
 	// ContentInfo stores the kind of any content in a repository.
 	ContentInfo struct {
-		Path string
-		Kind ContentKind
+		Path   string
+		Sha    string
+		BlobID string
+		Kind   ContentKind
 	}
 
 	// ContentService provides access to repositroy content.

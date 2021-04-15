@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+
 	"github.com/drone/go-scm/scm"
 )
 
@@ -23,6 +24,8 @@ func (s *contentService) Find(ctx context.Context, repo, path, ref string) (*scm
 	return &scm.Content{
 		Path: out.Path,
 		Data: raw,
+		// NB the sha returned for github rest api is the blob sha, not the commit sha
+		BlobID: out.Sha,
 	}, res, err
 }
 
@@ -32,7 +35,6 @@ func (s *contentService) Create(ctx context.Context, repo, path string, params *
 		Message: params.Message,
 		Branch:  params.Branch,
 		Content: params.Data,
-		Sha:     params.Sha,
 		Committer: commitAuthor{
 			Name:  params.Signature.Name,
 			Email: params.Signature.Email,
@@ -53,7 +55,8 @@ func (s *contentService) Update(ctx context.Context, repo, path string, params *
 		Message: params.Message,
 		Branch:  params.Branch,
 		Content: params.Data,
-		Sha:     params.Sha,
+		// NB the sha passed to github rest api is the blob sha, not the commit sha
+		Sha: params.BlobID,
 		Committer: commitAuthor{
 			Name:  params.Signature.Name,
 			Email: params.Signature.Email,
@@ -109,7 +112,9 @@ func convertContentInfoList(from []*content) []*scm.ContentInfo {
 }
 
 func convertContentInfo(from *content) *scm.ContentInfo {
-	to := &scm.ContentInfo{Path: from.Path}
+	to := &scm.ContentInfo{
+		Path:   from.Path,
+		BlobID: from.Sha}
 	switch from.Type {
 	case "file":
 		to.Kind = scm.ContentKindFile

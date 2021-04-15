@@ -55,6 +55,8 @@ type (
 		Added   bool
 		Renamed bool
 		Deleted bool
+		Sha     string
+		BlobID  string
 	}
 
 	Label struct {

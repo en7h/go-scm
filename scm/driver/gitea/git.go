@@ -17,6 +17,10 @@ type gitService struct {
 	client *wrapper
 }
 
+func (s *gitService) CreateBranch(ctx context.Context, repo string, params *scm.CreateBranch) (*scm.Response, error) {
+	return nil, scm.ErrNotSupported
+}
+
 func (s *gitService) FindBranch(ctx context.Context, repo, name string) (*scm.Reference, *scm.Response, error) {
 	path := fmt.Sprintf("api/v1/repos/%s/branches/%s", repo, name)
 	out := new(branch)
@@ -32,7 +36,19 @@ func (s *gitService) FindCommit(ctx context.Context, repo, ref string) (*scm.Com
 }
 
 func (s *gitService) FindTag(ctx context.Context, repo, name string) (*scm.Reference, *scm.Response, error) {
-	return nil, nil, scm.ErrNotSupported
+	name = scm.TrimRef(name)
+	path := fmt.Sprintf("api/v1/repos/%s/git/refs/tags/%s", repo, url.PathEscape(name))
+	out := []*tag{}
+	res, err := s.client.do(ctx, "GET", path, nil, &out)
+	if err != nil {
+		return nil, res, err
+	}
+	for _, tag := range convertTagList(out) {
+		if tag.Name == name {
+			return tag, res, nil
+		}
+	}
+	return nil, res, scm.ErrNotFound
 }
 
 func (s *gitService) ListBranches(ctx context.Context, repo string, opts scm.ListOptions) ([]*scm.Reference, *scm.Response, error) {
@@ -43,11 +59,17 @@ func (s *gitService) ListBranches(ctx context.Context, repo string, opts scm.Lis
 }
 
 func (s *gitService) ListCommits(ctx context.Context, repo string, _ scm.CommitListOptions) ([]*scm.Commit, *scm.Response, error) {
-	return nil, nil, scm.ErrNotSupported
+	path := fmt.Sprintf("api/v1/repos/%s/commits", repo)
+	out := []*commitInfo{}
+	res, err := s.client.do(ctx, "GET", path, nil, &out)
+	return convertCommitList(out), res, err
 }
 
 func (s *gitService) ListTags(ctx context.Context, repo string, _ scm.ListOptions) ([]*scm.Reference, *scm.Response, error) {
-	return nil, nil, scm.ErrNotSupported
+	path := fmt.Sprintf("api/v1/repos/%s/git/refs/tags", repo)
+	out := []*tag{}
+	res, err := s.client.do(ctx, "GET", path, nil, &out)
+	return convertTagList(out), res, err
 }
 
 func (s *gitService) ListChanges(ctx context.Context, repo, ref string, _ scm.ListOptions) ([]*scm.Change, *scm.Response, error) {
@@ -94,6 +116,17 @@ type (
 		Email    string `json:"email"`
 		Username string `json:"username"`
 	}
+
+	// gitea tag object
+	tag struct {
+		Ref    string `json:"ref"`
+		URL    string `json:"url"`
+		Object struct {
+			Type string `json:"type"`
+			Sha  string `json:"sha"`
+			URL  string `json:"url"`
+		} `json:"object"`
+	}
 )
 
 //
@@ -116,13 +149,13 @@ func convertBranch(src *branch) *scm.Reference {
 	}
 }
 
-// func convertCommitList(src []*commit) []*scm.Commit {
-// 	dst := []*scm.Commit{}
-// 	for _, v := range src {
-// 		dst = append(dst, convertCommitInfo(v))
-// 	}
-// 	return dst
-// }
+func convertCommitList(src []*commitInfo) []*scm.Commit {
+	dst := []*scm.Commit{}
+	for _, v := range src {
+		dst = append(dst, convertCommitInfo(v))
+	}
+	return dst
+}
 
 func convertCommitInfo(src *commitInfo) *scm.Commit {
 	return &scm.Commit{
@@ -148,5 +181,21 @@ func convertUserSignature(src user) scm.Signature {
 		Email:  src.Email,
 		Name:   src.Fullname,
 		Avatar: src.Avatar,
+	}
+}
+
+func convertTagList(src []*tag) []*scm.Reference {
+	var dst []*scm.Reference
+	for _, v := range src {
+		dst = append(dst, convertTag(v))
+	}
+	return dst
+}
+
+func convertTag(src *tag) *scm.Reference {
+	return &scm.Reference{
+		Name: scm.TrimRef(src.Ref),
+		Path: src.Ref,
+		Sha:  src.Object.Sha,
 	}
 }

@@ -16,6 +16,15 @@ type gitService struct {
 	client *wrapper
 }
 
+func (s *gitService) CreateBranch(ctx context.Context, repo string, params *scm.CreateBranch) (*scm.Response, error) {
+	path := fmt.Sprintf("repos/%s/git/refs", repo)
+	in := &createBranch{
+		Ref: scm.ExpandRef(params.Name, "refs/heads"),
+		Sha: params.Sha,
+	}
+	return s.client.do(ctx, "POST", path, in, nil)
+}
+
 func (s *gitService) FindBranch(ctx context.Context, repo, name string) (*scm.Reference, *scm.Response, error) {
 	path := fmt.Sprintf("repos/%s/branches/%s", repo, name)
 	out := new(branch)
@@ -31,7 +40,10 @@ func (s *gitService) FindCommit(ctx context.Context, repo, ref string) (*scm.Com
 }
 
 func (s *gitService) FindTag(ctx context.Context, repo, name string) (*scm.Reference, *scm.Response, error) {
-	return nil, nil, scm.ErrNotSupported
+	path := fmt.Sprintf("repos/%s/git/ref/tags/%s", repo, name)
+	out := new(ref)
+	res, err := s.client.do(ctx, "GET", path, nil, out)
+	return convertRef(out), res, err
 }
 
 func (s *gitService) ListBranches(ctx context.Context, repo string, opts scm.ListOptions) ([]*scm.Reference, *scm.Response, error) {
@@ -69,6 +81,11 @@ func (s *gitService) CompareChanges(ctx context.Context, repo, source, target st
 	return convertChangeList(out.Files), res, err
 }
 
+type createBranch struct {
+	Ref string `json:"ref"`
+	Sha string `json:"sha"`
+}
+
 type branch struct {
 	Name      string `json:"name"`
 	Commit    commit `json:"commit"`
@@ -100,6 +117,14 @@ type commit struct {
 		Login     string `json:"login"`
 	} `json:"committer"`
 	Files []*file `json:"files"`
+}
+
+type ref struct {
+	Ref    string `json:"ref"`
+	Object struct {
+		Type string `json:"type"`
+		Sha  string `json:"sha"`
+	} `json:"object"`
 }
 
 type compare struct {
@@ -149,6 +174,14 @@ func convertBranch(from *branch) *scm.Reference {
 		Name: scm.TrimRef(from.Name),
 		Path: scm.ExpandRef(from.Name, "refs/heads/"),
 		Sha:  from.Commit.Sha,
+	}
+}
+
+func convertRef(from *ref) *scm.Reference {
+	return &scm.Reference{
+		Name: scm.TrimRef(from.Ref),
+		Path: from.Ref,
+		Sha:  from.Object.Sha,
 	}
 }
 
